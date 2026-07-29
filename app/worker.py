@@ -135,7 +135,12 @@ class PipelineWorker(QThread):
             pic_url = upload_images_for_part(mpn, self._log)
 
             # Phase D — Scrape Dorman product page
-            scraped = scrape_part(mpn, self._log)
+            scraped = scrape_part(
+                mpn,
+                brand=part.get("brand", ""),
+                subtype=part.get("subtype", ""),
+                log_callback=self._log
+            )
 
             # Phase D — Gemini listing generation
             listing = generate_listing(part, scraped, self._log)

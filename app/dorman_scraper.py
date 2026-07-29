@@ -44,7 +44,7 @@ def _extract_specs(soup: BeautifulSoup) -> str:
     return " | ".join(blocks)
 
 
-def scrape_part(mpn: str, log_callback=None) -> dict:
+def scrape_part(mpn: str, brand: str = "", subtype: str = "", log_callback=None) -> dict:
     """
     Fetch and parse the PartCatalog product page for `mpn` via their search endpoint.
     Always returns a dict with keys: mpn, product_header, spec_text, specs_dict, compatibility, interchange_numbers.
@@ -80,11 +80,31 @@ def scrape_part(mpn: str, log_callback=None) -> dict:
         # e.g., /products/dorman-76916-window-crank-handle
         link_pattern = re.compile(rf"/products/[-a-z0-9]*{re.escape(mpn)}[-a-z0-9]*", re.IGNORECASE)
         
-        # Find the top product card link via BeautifulSoup
+        # Scoring keywords
+        brand_words = [w.lower().strip() for w in re.split(r'[^a-zA-Z0-9]', brand) if w.strip()]
+        subtype_words = [w.lower().strip() for w in re.split(r'[^a-zA-Z0-9]', subtype) if w.strip()]
+        
+        best_score = -1
         for a in search_soup.find_all("a", href=True):
-            if link_pattern.search(a["href"]):
-                product_link = a["href"]
-                break
+            href = a["href"]
+            if link_pattern.search(href):
+                score = 0
+                href_lower = href.lower()
+                text_lower = a.get_text().lower()
+
+                # Score brand matches
+                for word in brand_words:
+                    if word in href_lower or word in text_lower:
+                        score += 10
+
+                # Score subtype matches
+                for word in subtype_words:
+                    if word in href_lower or word in text_lower:
+                        score += 2
+
+                if score > best_score:
+                    best_score = score
+                    product_link = href
 
         # Robust Fallback Search: If BeautifulSoup misses it, scan the raw response text
         if not product_link:

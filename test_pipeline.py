@@ -47,7 +47,11 @@ def run_test():
     
     # Run Scraper
     logger.info(f"Running scraper for MPN: {mpn}...")
-    scraped = scrape_part(mpn)
+    scraped = scrape_part(
+        mpn,
+        brand=part.get("brand", ""),
+        subtype=part.get("subtype", "")
+    )
     logger.info("Scraper completed successfully.")
     
     # Run AI listing generation
