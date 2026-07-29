@@ -36,7 +36,7 @@ _STANDARD_HEADERS: list[str] = [
     "Category",
     "Title",
     "Description",
-    "Price",
+    "StartPrice",
     "Quantity",
     "Format",
     "Duration",
@@ -58,7 +58,7 @@ _STATIC_ROW: dict[str, str] = {
     "Format":              "FixedPriceItem",
     "Duration":            "GTC",
     "Quantity":            "1",
-    "Price":               "ADD_PRICE",
+    "StartPrice":          "ADD_PRICE",
     # Business policy profiles — must exactly match the saved profile names in Seller Hub
     "ShippingProfileName": "Free Shipping",
     "ReturnProfileName":   "30 Days Money Back or Replacement (Primary Return Policy)",
