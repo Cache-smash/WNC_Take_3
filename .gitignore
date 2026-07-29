@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+app_data.db
+US_Parts_Catalog_Dorman_Help.tsv
+.env
+*.log
+*.tmp
