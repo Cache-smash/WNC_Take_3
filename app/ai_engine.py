@@ -174,7 +174,7 @@ def generate_listing(part_data: dict, scraped_data: dict, log_callback=None) -> 
         subtype=subtype,
     )
 
-    _log(f"[AI] Generating listing for {mpn} via Gemini 3.5 Flash...")
+    _log(f"[AI] Generating listing for {mpn} via {_MODEL_NAME}...")
 
     client = _get_client()
     config = genai_types.GenerateContentConfig(
