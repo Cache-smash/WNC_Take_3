@@ -148,8 +148,12 @@ def build_csv(enriched_parts: list[dict]) -> bytes:
                 row[col] = mpn
             elif aspect_clean == "brand":
                 row[col] = brand
-            elif "interchange" in aspect_clean or "cross reference" in aspect_clean or "replaces" in aspect_clean:
-                row[col] = ", ".join(interchanges) if interchanges else ""
+            elif "interchange" in aspect_clean or "cross reference" in aspect_clean or "replaces" in aspect_clean or "oe/oem" in aspect_clean:
+                val = ", ".join(interchanges) if interchanges else ""
+                if len(val) > 65:
+                    # Truncate at nearest comma boundary within 65 chars
+                    val = val[:65].rsplit(",", 1)[0].strip()
+                row[col] = val
             else:
                 # Dynamic matching against scraped specifications
                 matched_val = ""
@@ -158,6 +162,8 @@ def build_csv(enriched_parts: list[dict]) -> bytes:
                     if aspect_clean == spec_key_clean or aspect_clean in spec_key_clean or spec_key_clean in aspect_clean:
                         matched_val = spec_val
                         break
+                if len(matched_val) > 65:
+                    matched_val = matched_val[:65].rsplit(",", 1)[0].strip()
                 row[col] = matched_val
 
         writer.writerow(row)
