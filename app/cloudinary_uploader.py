@@ -20,17 +20,18 @@ logger = logging.getLogger(__name__)
 PHOTO_DIR   = Path(__file__).parent.parent / "photo_input"
 MAX_IMAGES  = 24
 
-# Cloudinary smart-crop transformation applied to every upload
+# Cloudinary smart-pad transformation (preserves full image without cropping edges)
 _TRANSFORM = [
     {
-        "gravity": "auto",
-        "crop":    "fill",
-        "width":   1600,
-        "height":  1200,
-        "quality": "auto:best",
-        "fetch_format": "auto",
+        "crop":       "pad",
+        "background": "white",
+        "width":      1600,
+        "height":     1600,
+        "quality":    "auto:best",
+        "fetch_format": "jpg",
     }
 ]
+
 
 
 def _configure() -> None:
@@ -55,7 +56,7 @@ def upload_images_for_part(mpn: str, log_callback=None) -> str:
 
     _configure()
 
-    pattern = re.compile(rf"^{re.escape(mpn)}_\d+\.(jpg|jpeg|png)$", re.IGNORECASE)
+    pattern = re.compile(rf"^{re.escape(mpn)}_\d+\.(jpg|jpeg|png|webp)$", re.IGNORECASE)
     candidates = sorted(
         [f for f in PHOTO_DIR.iterdir() if pattern.match(f.name)]
     )[:MAX_IMAGES]

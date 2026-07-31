@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # Fixed columns in the order they appear in the output CSV.
 # Column names are case-sensitive and must match eBay File Exchange exactly.
 _STANDARD_HEADERS: list[str] = [
-    "Action",
+    "Action(SiteID=eBayMotors|Country=US|Currency=USD|Version=1193|CC=UTF-8)",
     "Category",
     "Title",
     "Description",
@@ -48,23 +48,35 @@ _STANDARD_HEADERS: list[str] = [
     "PostalCode",
     # Catalog matching + inventory tracking
     "Brand",
+    "MPN",
     "CustomLabel",
     "Product:EPID",
     "PicURL",
+    # Item Condition ID (e.g. 1000 for New)
+    "ConditionID",
+    # Package weight details (required for calculated shipping policy or category validation)
+    "WeightMajor",
+    "WeightMinor",
+    "WeightUnit",
 ]
 
 _STATIC_ROW: dict[str, str] = {
-    "Action":              "Add",
+    "Action(SiteID=eBayMotors|Country=US|Currency=USD|Version=1193|CC=UTF-8)": "Add",
     "Format":              "FixedPriceItem",
     "Duration":            "GTC",
     "Quantity":            "1",
     "StartPrice":          "ADD_PRICE",
+    "ConditionID":         "1000",
     # Business policy profiles — must exactly match the saved profile names in Seller Hub
     "ShippingProfileName": "Free Shipping",
     "ReturnProfileName":   "30 Days Money Back or Replacement (Primary Return Policy)",
     "PaymentProfileName":  "eBay Managed Payments (Primary Payment Policy)",
     # WNC Parts Slingers — Hendersonville, NC
     "PostalCode":          "28739",
+    # Default package weight properties (1 lb 0 oz)
+    "WeightMajor":         "1",
+    "WeightMinor":         "0",
+    "WeightUnit":          "lb",
 }
 
 
@@ -107,9 +119,16 @@ def build_csv(enriched_parts: list[dict]) -> bytes:
         row: dict[str, Any] = {**_STATIC_ROW}
         row["Category"]     = pd.get("category_id", "")
         row["Title"]        = listing.get("title", "")
-        row["Description"]  = listing.get("description_html", "")
-        # Standalone Brand — guarantees catalog matching alongside Product:EPID
+        raw_desc = listing.get("description_html", "")
+        # Hard safety guardrail: Cap Description at 25,000 chars to prevent Excel display line breaks and eBay errors
+        if len(raw_desc) > 25000:
+            parts = raw_desc.split("<tr>")
+            raw_desc = "<tr>".join(parts[:41]) + "</table><p><em>...and additional vehicle applications. Please refer to eBay compatibility table above.</em></p>"
+        row["Description"]  = raw_desc
+
+        # Standalone Brand + MPN — guarantees catalog matching alongside Product:EPID
         row["Brand"]        = brand
+        row["MPN"]          = mpn
         # CustomLabel = SKU in {mpn}-1 format for inventory tracking
         row["CustomLabel"]  = f"{mpn}-1"
         row["Product:EPID"] = pd.get("epid", "")

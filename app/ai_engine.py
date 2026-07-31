@@ -21,7 +21,7 @@ from google.genai import types as genai_types
 
 logger = logging.getLogger(__name__)
 
-_MODEL_NAME = "gemini-3.5-flash"
+_MODEL_NAME = "gemini-3.6-flash"
 _client: genai.Client | None = None   # Lazy singleton
 
 
@@ -65,8 +65,8 @@ Task
       technical attributes, dimensions, and fitment notes extracted
       from the scraped specs. If specs are unavailable, use only the
       known brand, part number, and category data.
-   Rules: No external CSS. No JavaScript. No inline style attributes
-   other than color:#000000 if needed. Keep markup eBay-compatible.
+   Rules: No external CSS. No JavaScript. Keep markup eBay-compatible.
+   DO NOT list Fitment or Cross-Reference / Interchange numbers in this top bullet list (they are automatically appended in dedicated sections below).
 
 Return ONLY this exact JSON object — no prose, no code fences:
 {{"title": "YOUR TITLE (max 80 chars)", "description_html": "<p>…</p><ul><li>…</li></ul>"}}
@@ -105,19 +105,30 @@ def _append_fitment_and_oe(description_html: str, scraped_data: dict) -> str:
             "<th>Year</th><th>Make</th><th>Model</th><th>Position</th><th>Notes</th>"
             "</tr>"
         )
-        for fit in compatibility:
+        # Cap HTML fitment table at 40 rows to strictly enforce eBay's 32,767 character description limit
+        max_rows = 40
+        for fit in compatibility[:max_rows]:
+            raw_notes = fit.get('Notes', 'N/A').strip()
+            # Clean repetitive scrap text like 'Packaging Type: Card' from notes
+            clean_notes = re.sub(r'(?i)\bPackaging Type:\s*\w+\b', '', raw_notes).strip()
+            if not clean_notes or clean_notes == 'N/A':
+                clean_notes = 'Direct Replacement'
+
             fitment_html += (
                 f"<tr>"
                 f"<td>{fit.get('Year', 'N/A')}</td>"
                 f"<td>{fit.get('Make', 'N/A')}</td>"
                 f"<td>{fit.get('Model', 'N/A')}</td>"
                 f"<td>{fit.get('Position', 'N/A')}</td>"
-                f"<td>{fit.get('Notes', 'N/A')}</td>"
+                f"<td>{clean_notes}</td>"
                 f"</tr>"
             )
         fitment_html += "</table>"
+        if len(compatibility) > max_rows:
+            fitment_html += f"<p><em>...and {len(compatibility) - max_rows} additional vehicle applications. Please refer to eBay compatibility list above for full fitment.</em></p>"
 
     return f"{description_html}{interchange_html}{fitment_html}"
+
 
 
 def _rule_based_fallback(part_data: dict, scraped_data: dict) -> dict:
@@ -200,12 +211,12 @@ def generate_listing(part_data: dict, scraped_data: dict, log_callback=None) -> 
                 _log(f"[AI] ⚠ Unexpected Gemini error for {mpn}: {exc}")
                 break
 
-    # Fallback to gemini-2.5-flash if primary model failed
+    # Fallback to gemini-3.5-flash if primary model failed
     if not success:
-        _log(f"[AI] ⚠ Primary model failed. Attempting fallback request with gemini-2.5-flash...")
+        _log(f"[AI] ⚠ Primary model failed. Attempting fallback request with gemini-3.5-flash...")
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash",
                 contents=prompt,
                 config=config,
             )
