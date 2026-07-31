@@ -12,6 +12,7 @@ pipeline never stalls on a single bad Gemini response.
 
 import logging
 import os
+import re
 import time
 
 from pydantic import BaseModel, Field
