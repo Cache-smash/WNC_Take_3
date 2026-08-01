@@ -73,10 +73,10 @@ _STATIC_ROW: dict[str, str] = {
     "PaymentProfileName":  "eBay Managed Payments (Primary Payment Policy)",
     # WNC Parts Slingers — Hendersonville, NC
     "PostalCode":          "28739",
-    # Default package weight properties (1 lb 0 oz)
-    "WeightMajor":         "1",
-    "WeightMinor":         "0",
-    "WeightUnit":          "lb",
+    # Default package weight properties (0 lb 4 oz)
+    "WeightMajor":         "0",
+    "WeightMinor":         "4",
+    "WeightUnit":          "oz",
 }
 
 
