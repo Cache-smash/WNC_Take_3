@@ -1,8 +1,21 @@
 .venv/
 __pycache__/
 *.pyc
-app_data.db
-US_Parts_Catalog_Dorman_Help.tsv
+*.db
 .env
 *.log
 *.tmp
+
+# Ignore all eBay CSV reports and generated bulk files
+*.csv
+Debug & Accepted CSVs (need renamed and moved)/
+
+# Ignore raw photo samples and screenshots
+photo_input/
+*.png
+
+# Ignore raw store discovery datasets and large TSV catalogs
+store_discovery/*.txt
+store_discovery/*.json
+store_discovery/*.tsv
+store_discovery/csv_archive/

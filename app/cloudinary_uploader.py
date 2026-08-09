@@ -35,10 +35,14 @@ _TRANSFORM = [
 
 
 def _configure() -> None:
+    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME", "ddlzkx9sz")
+    if not cloud_name or cloud_name.startswith("op://"):
+        cloud_name = "ddlzkx9sz"
+
     cloudinary.config(
-        cloud_name=os.environ["CLOUDINARY_CLOUD_NAME"],
-        api_key=   os.environ["CLOUDINARY_API_KEY"],
-        api_secret=os.environ["CLOUDINARY_API_SECRET"],
+        cloud_name=cloud_name,
+        api_key=os.getenv("CLOUDINARY_API_KEY", ""),
+        api_secret=os.getenv("CLOUDINARY_API_SECRET", ""),
         secure=True,
     )
 
@@ -54,7 +58,9 @@ def upload_images_for_part(mpn: str, log_callback=None) -> str:
             log_callback(msg)
         logger.info(msg)
 
-    _configure()
+    if not PHOTO_DIR.exists():
+        _log(f"[Images] No photo_input/ directory found — skipping local upload.")
+        return ""
 
     pattern = re.compile(rf"^{re.escape(mpn)}_\d+\.(jpg|jpeg|png|webp)$", re.IGNORECASE)
     candidates = sorted(
@@ -62,7 +68,13 @@ def upload_images_for_part(mpn: str, log_callback=None) -> str:
     )[:MAX_IMAGES]
 
     if not candidates:
-        _log(f"[Images] No images found for {mpn} in photo_input/ — skipping.")
+        _log(f"[Images] No images found for {mpn} in photo_input/ - skipping.")
+        return ""
+
+    try:
+        _configure()
+    except Exception as exc:
+        _log(f"[Images] [WARN] Cloudinary configuration error: {exc}")
         return ""
 
     _log(f"[Images] Found {len(candidates)} image(s) for {mpn}. Uploading to Cloudinary...")

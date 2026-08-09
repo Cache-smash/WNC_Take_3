@@ -25,7 +25,13 @@ Pre-filled C: columns:
 import csv
 import io
 import logging
+import os
 from typing import Any
+
+# Default Cloudinary cloud name for wnc-parts
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "ddlzkx9sz")
+if CLOUDINARY_CLOUD_NAME.startswith("op://"):
+    CLOUDINARY_CLOUD_NAME = "ddlzkx9sz"
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +86,7 @@ _STATIC_ROW: dict[str, str] = {
 }
 
 
-def build_csv(enriched_parts: list[dict]) -> bytes:
+def build_csv(enriched_parts: list[dict], shipping_profile: str = "Free Shipping") -> bytes:
     """
     Build and return a UTF-8 BOM CSV as raw bytes.
 
@@ -117,7 +123,15 @@ def build_csv(enriched_parts: list[dict]) -> bytes:
         brand   = pd.get("brand", "Dorman/Help")
 
         row: dict[str, Any] = {**_STATIC_ROW}
+        row["ShippingProfileName"] = shipping_profile
         row["Category"]     = pd.get("category_id", "")
+
+        # Dynamic Pricing Engine calculation
+        from .pricing_engine import evaluate_part_pricing
+        pricing_rec = evaluate_part_pricing(mpn=mpn, brand=brand, title=listing.get("title", ""))
+        row["StartPrice"]   = f"{pricing_rec.suggested_price:.2f}"
+
+
         row["Title"]        = listing.get("title", "")
         raw_desc = listing.get("description_html", "")
         # Hard safety guardrail: Cap Description at 25,000 chars to prevent Excel display line breaks and eBay errors

@@ -1,0 +1,28 @@
+{
+  "ebay-csv-auto-validator": {
+    "enabled": true,
+    "PostToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python C:\\Users\\kbcha\\.gemini\\config\\skills\\ebay-validator\\scripts\\hook_csv_validator.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  },
+  "step-health-monitor": {
+    "enabled": true,
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "uv run python C:\\Users\\kbcha\\.gemini\\config\\skills\\step-monitor\\step_counter_hook.py",
+        "timeout": 10
+      }
+    ]
+  }
+}
+

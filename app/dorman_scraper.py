@@ -65,8 +65,8 @@ def scrape_part(mpn: str, brand: str = "", subtype: str = "", log_callback=None)
     }
 
     # ── Step 1: Search ──
-    search_url = f"https://www.partcatalog.com/search?q={mpn}"
-    _log(f"[Scraper] Fetching PartCatalog search for {mpn} (rate-limit: {_RATE_LIMIT_SECS}s)...")
+    search_url = f"https://www.partcatalog.com/search?q=Dorman+{mpn}"
+    _log(f"[Scraper] Fetching PartCatalog search for Dorman {mpn} (rate-limit: {_RATE_LIMIT_SECS}s)...")
     time.sleep(_RATE_LIMIT_SECS)
 
     try:
@@ -84,20 +84,19 @@ def scrape_part(mpn: str, brand: str = "", subtype: str = "", log_callback=None)
         brand_words = [w.lower().strip() for w in re.split(r'[^a-zA-Z0-9]', brand) if w.strip()]
         subtype_words = [w.lower().strip() for w in re.split(r'[^a-zA-Z0-9]', subtype) if w.strip()]
         
-        best_score = -1
+        # Require Dorman / Help brand match in href or text
+        best_score = 0
         for a in search_soup.find_all("a", href=True):
             href = a["href"]
             if link_pattern.search(href):
-                score = 0
                 href_lower = href.lower()
                 text_lower = a.get_text().lower()
 
-                # Score brand matches
-                for word in brand_words:
-                    if word in href_lower or word in text_lower:
-                        score += 10
+                # MUST contain Dorman or Help to be considered
+                if not ("dorman" in href_lower or "dorman" in text_lower or "help" in href_lower or "help" in text_lower):
+                    continue
 
-                # Score subtype matches
+                score = 10
                 for word in subtype_words:
                     if word in href_lower or word in text_lower:
                         score += 2
@@ -106,22 +105,15 @@ def scrape_part(mpn: str, brand: str = "", subtype: str = "", log_callback=None)
                     best_score = score
                     product_link = href
 
-        # Robust Fallback Search: If BeautifulSoup misses it, scan the raw response text
+        # PartCatalog requires exact Dorman slugs. If we can't find Dorman in search, do not guess.
         if not product_link:
-            match = link_pattern.search(search_resp.text)
-            if match:
-                # Clean up any trailing quotes or brackets if matched directly from raw HTML strings
-                product_link = match.group(0).split('"')[0].split("'")[0].split("\\")[0]
-
-        # PartCatalog requires exact slugs. If we can't find it in search, do not guess.
-        if not product_link:
-            _log(f"[Scraper] ⚠ No product link containing {mpn} found in search results. Using fallback.")
+            _log(f"[Scraper] ⚠ No Dorman/Help product link containing {mpn} found in search results. Using fallback.")
             return empty
 
         product_url = product_link if product_link.startswith("http") else f"https://www.partcatalog.com{product_link}"
 
         # ── Step 2: Product Page ──
-        _log(f"[Scraper] Found product page, fetching (rate-limit: {_RATE_LIMIT_SECS}s)...")
+        _log(f"[Scraper] Found Dorman product page, fetching (rate-limit: {_RATE_LIMIT_SECS}s)...")
         time.sleep(_RATE_LIMIT_SECS)
         
         prod_resp = requests.get(product_url, headers=_HEADERS, timeout=_TIMEOUT, allow_redirects=True)
@@ -134,6 +126,11 @@ def scrape_part(mpn: str, brand: str = "", subtype: str = "", log_callback=None)
 
         soup           = BeautifulSoup(prod_resp.text, "html.parser")
         product_header = _extract_header(soup)
+
+        # Verify page header contains Dorman or Help
+        if not ("dorman" in product_header.lower() or "help" in product_header.lower()):
+            _log(f"[Scraper] ⚠ Product header '{product_header}' does not match Dorman/Help brand. Using fallback.")
+            return empty
         spec_text      = _extract_specs(soup)
 
         # Extract structured specifications (Table 0)

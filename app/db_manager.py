@@ -130,9 +130,19 @@ def lookup_parts(mpn_list: list[str]) -> list[dict]:
         placeholders = ",".join("?" * len(mpn_list))
         rows = conn.execute(
             f"SELECT epid, title, brand, mpn, subtype, type, category_id, category_breadcrumb "
-            f"FROM parts WHERE mpn IN ({placeholders})",
+            f"FROM parts WHERE mpn IN ({placeholders}) "
+            f"ORDER BY CASE WHEN brand LIKE '%Dorman%' OR brand LIKE '%Help%' THEN 0 ELSE 1 END",
             mpn_list,
         ).fetchall()
-        return [dict(r) for r in rows]
+        # Ensure only 1 row per MPN, taking the highest priority (Dorman) row
+        seen = set()
+        results = []
+        for r in rows:
+            dict_r = dict(r)
+            mpn_key = dict_r.get("mpn", "").strip()
+            if mpn_key not in seen:
+                seen.add(mpn_key)
+                results.append(dict_r)
+        return results
     finally:
         conn.close()

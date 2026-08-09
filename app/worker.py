@@ -17,8 +17,7 @@ from PySide6.QtCore import QThread, Signal
 
 from . import csv_builder, db_manager
 from .ai_engine import generate_listing
-from .cloudinary_uploader import upload_images_for_part
-from .dorman_scraper import scrape_part
+from .dorman_provider import fetch_combined_dorman_data
 from .ebay_auth import get_token
 from .ebay_taxonomy import get_aspects_for_category
 
@@ -30,9 +29,11 @@ class PipelineWorker(QThread):
     finished_signal: Signal = Signal(bytes)
     error_signal:    Signal = Signal(str)
 
-    def __init__(self, mpn_list: list[str]) -> None:
+    def __init__(self, mpn_list: list[str], shipping_profile: str = "Free Shipping") -> None:
         super().__init__()
-        self.mpn_list = mpn_list
+        self.mpn_list         = mpn_list
+        self.shipping_profile = shipping_profile
+
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -82,21 +83,21 @@ class PipelineWorker(QThread):
 
         for p in parts:
             self._log(
-                f"[Phase A] ✓ {p['mpn']} → ePID: {p['epid']}  "
+                f"[Phase A] [OK] {p['mpn']} -> ePID: {p['epid']}  "
                 f"CategoryID: {p['category_id']}  Brand: {p['brand']}"
             )
 
-        # ── Phase B: eBay OAuth + Taxonomy ───────────────────────────
+        # -- Phase B: eBay OAuth + Taxonomy ---------------------------
         self._log("[Phase B] Authenticating with eBay Production API...")
         ebay_authenticated = False
         try:
             get_token()
             ebay_authenticated = True
-            self._log("[Phase B] ✓ OAuth token obtained.")
+            self._log("[Phase B] [OK] OAuth token obtained.")
         except Exception as exc:
             self._log(
-                f"[Phase B] ⚠ eBay auth failed: {exc}. "
-                f"Taxonomy skipped — C: columns will be omitted from this batch."
+                f"[Phase B] [WARN] eBay auth failed: {exc}. "
+                f"Taxonomy skipped - C: columns will be omitted from this batch."
             )
 
         unique_cat_ids = sorted({p["category_id"] for p in parts})
@@ -114,36 +115,35 @@ class PipelineWorker(QThread):
                     aspects = get_aspects_for_category(cat_id)
                     category_aspects[cat_id] = aspects
                     self._log(
-                        f"[Phase B] ✓ CategoryID {cat_id} → {len(aspects)} C: columns."
+                        f"[Phase B] [OK] CategoryID {cat_id} -> {len(aspects)} C: columns."
                     )
                 except Exception as exc:
                     self._log(
-                        f"[Phase B] ⚠ Taxonomy fetch failed for {cat_id}: {exc}. "
+                        f"[Phase B] [WARN] Taxonomy fetch failed for {cat_id}: {exc}. "
                         f"Continuing without aspects."
                     )
                     category_aspects[cat_id] = []
 
-        # ── Phases C + D: Per-part enrichment ────────────────────────
+        # -- Phases C & D: Per-part enrichment ------------------------
         enriched_parts: list[dict] = []
 
         for part in parts:
             mpn = part["mpn"]
-            self._log(f"\n[Part {mpn}] ─────── Enrichment starting ───────")
+            self._log(f"\n[Part {mpn}] ------- Enrichment starting -------")
 
-            # Phase C — Cloudinary image upload
-            self._log(f"[Phase C] Processing images for {mpn}...")
-            pic_url = upload_images_for_part(mpn, self._log)
-
-            # Phase D — Scrape Dorman product page
-            scraped = scrape_part(
+            # Phases C & D — Dual-source data & image resolution (Koskowski + PartCatalog)
+            self._log(f"[Phase C & D] Resolving combined data for {mpn}...")
+            combined_data = fetch_combined_dorman_data(
                 mpn,
                 brand=part.get("brand", ""),
                 subtype=part.get("subtype", ""),
                 log_callback=self._log
             )
 
+            pic_url = combined_data.get("pic_url", "")
+
             # Phase D — Gemini listing generation
-            listing = generate_listing(part, scraped, self._log)
+            listing = generate_listing(part, combined_data, self._log)
 
             enriched_parts.append(
                 {
@@ -151,18 +151,19 @@ class PipelineWorker(QThread):
                     "listing":   listing,
                     "pic_url":   pic_url,
                     "aspects":   category_aspects.get(part["category_id"], []),
-                    "scraped_data": scraped,
+                    "scraped_data": combined_data,
                 }
             )
-            self._log(f"[Part {mpn}] ✓ Enrichment complete.")
+            self._log(f"[Part {mpn}] [OK] Enrichment complete.")
 
-        # ── Phase E: CSV assembly ─────────────────────────────────────
+        # -- Phase E: CSV assembly -------------------------------------
         self._log("\n[Phase E] Assembling eBay CSV file...")
-        csv_bytes = csv_builder.build_csv(enriched_parts)
+        csv_bytes = csv_builder.build_csv(enriched_parts, shipping_profile=self.shipping_profile)
         self._log(
-            f"[Phase E] ✓ CSV ready — {len(enriched_parts)} listing row(s) "
+            f"[Phase E] [OK] CSV ready - {len(enriched_parts)} listing row(s) "
             f"across {len({p['part_data']['category_id'] for p in enriched_parts})} "
             f"unique eBay categories."
         )
+
 
         self.finished_signal.emit(csv_bytes)

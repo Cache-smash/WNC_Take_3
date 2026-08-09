@@ -50,5 +50,5 @@ def get_aspects_for_category(category_id: str) -> list[str]:
             seen.add(name)
 
     columns.sort()
-    logger.info("[Taxonomy] ✓ category_id=%s → %d aspect columns.", category_id, len(columns))
+    logger.info("[Taxonomy] [OK] category_id=%s -> %d aspect columns.", category_id, len(columns))
     return columns

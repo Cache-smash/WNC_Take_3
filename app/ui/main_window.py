@@ -19,8 +19,9 @@ Layout
 import logging
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtGui import QColor, QFont, QBrush, QTextCursor
 from PySide6.QtWidgets import (
+    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -29,11 +30,15 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from ..worker import PipelineWorker
+from .pricing_tab import PricingTabWidget
 
 logger = logging.getLogger(__name__)
 
@@ -41,18 +46,14 @@ logger = logging.getLogger(__name__)
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("WNC Parts Slingers — eBay Motors CSV Generator")
-        self.setMinimumSize(1000, 640)
+        self.setWindowTitle("WNC Parts Slingers — eBay Motors Suite")
+        self.setMinimumSize(1050, 680)
 
         self._csv_bytes: bytes | None    = None
         self._worker: PipelineWorker | None = None
 
         self._build_ui()
         self._apply_stylesheet()
-
-    # ------------------------------------------------------------------
-    # UI construction
-    # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -63,21 +64,67 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(14, 14, 14, 14)
         root.setSpacing(12)
 
-        # ── App title ─────────────────────────────────────────────────
-        title_lbl = QLabel("WNC Parts Slingers — eBay Motors CSV Generator")
+        # ── App Title & Header Controls ───────────────────────────────
+        header_bar = QHBoxLayout()
+        title_lbl = QLabel("WNC Parts Slingers — E-Commerce Suite")
         title_font = QFont()
         title_font.setPointSize(14)
         title_font.setBold(True)
         title_lbl.setFont(title_font)
-        root.addWidget(title_lbl)
+        header_bar.addWidget(title_lbl)
+
+        header_bar.addStretch()
+
+        # Shipping Policy Selector Dropdown (3 Business Profiles)
+        ship_lbl = QLabel("Active Shipping Policy:")
+        ship_lbl.setFont(QFont("Segoe UI", 9, QFont.Bold))
+        header_bar.addWidget(ship_lbl)
+
+        self.shipping_policy_combo = QComboBox()
+        self.shipping_policy_combo.addItems([
+            "Free Shipping",
+            "Calculated Shipping (USPS Ground)",
+            "Flat Rate $4.25 Shipping",
+        ])
+        self.shipping_policy_combo.setToolTip("Select the default eBay Shipping Business Policy profile for CSV exports.")
+        header_bar.addWidget(self.shipping_policy_combo)
+
+        root.addLayout(header_bar)
+
+        # ── Main Tab Widget ───────────────────────────────────────────
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #333333;
+                background-color: #121212;
+            }
+            QTabBar::tab {
+                background: #1E1E1E;
+                color: #B0B0B0;
+                padding: 8px 16px;
+                font-weight: bold;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background: #2D2D2D;
+                color: #03DAC6;
+                border-bottom: 2px solid #03DAC6;
+            }
+        """)
+
+        # ── TAB 1: CSV Listing Generator (Original App) ───────────────
+        tab1 = QWidget()
+        t1_layout = QVBoxLayout(tab1)
+        t1_layout.setContentsMargins(10, 10, 10, 10)
+        t1_layout.setSpacing(10)
 
         sub_lbl = QLabel(
             "Enter up to 15 Dorman/Help part numbers and click Process to generate your listing CSV."
         )
         sub_lbl.setWordWrap(True)
-        root.addWidget(sub_lbl)
+        t1_layout.addWidget(sub_lbl)
 
-        # ── Horizontal splitter: input | log ──────────────────────────
         splitter = QSplitter(Qt.Horizontal)
 
         # Left panel — part number input
@@ -87,15 +134,11 @@ class MainWindow(QMainWindow):
         left.setSpacing(8)
 
         input_lbl = QLabel("Part Numbers (one per line, max 15):")
-        input_font = QFont()
-        input_font.setBold(True)
-        input_lbl.setFont(input_font)
+        input_lbl.setFont(QFont("Segoe UI", 9, QFont.Bold))
         left.addWidget(input_lbl)
 
         self.part_input = QPlainTextEdit()
-        self.part_input.setPlaceholderText(
-            "e.g.\n76970\n42317\n13938\n51729"
-        )
+        self.part_input.setPlaceholderText("e.g.\n76970\n42317\n13938\n51729")
         self.part_input.setMinimumHeight(180)
         self.part_input.setMaximumHeight(280)
         left.addWidget(self.part_input)
@@ -103,25 +146,21 @@ class MainWindow(QMainWindow):
         self.process_btn = QPushButton("⚙   Process Parts")
         self.process_btn.setObjectName("primaryBtn")
         self.process_btn.setMinimumHeight(42)
-        self.process_btn.setToolTip(
-            "Run the full pipeline: DB lookup → eBay API → Cloudinary → AI → CSV"
-        )
+        self.process_btn.setToolTip("Run pipeline: DB lookup → Scrapers → AI → CSV")
         self.process_btn.clicked.connect(self._on_process)
         left.addWidget(self.process_btn)
 
         left.addStretch()
         splitter.addWidget(left_widget)
 
-        # Right panel — scrolling status log
+        # Right panel — status log
         right_widget = QWidget()
         right = QVBoxLayout(right_widget)
         right.setContentsMargins(8, 0, 0, 0)
         right.setSpacing(6)
 
         log_lbl = QLabel("Status Log:")
-        log_font = QFont()
-        log_font.setBold(True)
-        log_lbl.setFont(log_font)
+        log_lbl.setFont(QFont("Segoe UI", 9, QFont.Bold))
         right.addWidget(log_lbl)
 
         self.log_view = QPlainTextEdit()
@@ -134,20 +173,16 @@ class MainWindow(QMainWindow):
         right.addWidget(self.log_view)
 
         splitter.addWidget(right_widget)
-
-        # Give the log panel 2× the horizontal space of the input panel
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
 
-        root.addWidget(splitter, stretch=1)
+        t1_layout.addWidget(splitter, stretch=1)
 
-        # ── Download bar ──────────────────────────────────────────────
+        # Download Bar for Tab 1
         bottom = QHBoxLayout()
-
         self.download_btn = QPushButton("⬇   Download CSV")
         self.download_btn.setMinimumHeight(42)
         self.download_btn.setEnabled(False)
-        self.download_btn.setToolTip("Save the generated eBay listing CSV file to disk.")
         self.download_btn.clicked.connect(self._on_download)
         bottom.addWidget(self.download_btn)
 
@@ -155,7 +190,53 @@ class MainWindow(QMainWindow):
         self.status_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         bottom.addWidget(self.status_lbl, stretch=1)
 
-        root.addLayout(bottom)
+        t1_layout.addLayout(bottom)
+
+        self.tabs.addTab(tab1, "📦   CSV Listing Generator")
+
+        # ── TAB 2: Competitive Pricing Engine ─────────────────────────
+        self.pricing_tab = PricingTabWidget()
+        self.tabs.addTab(self.pricing_tab, "🏷️   Competitive Pricing Engine")
+
+        # ── TAB 3: Live CSV Data Inspector (Color-Coded) ──────────────
+        tab3 = QWidget()
+        t3_layout = QVBoxLayout(tab3)
+        t3_layout.setContentsMargins(10, 10, 10, 10)
+        t3_layout.setSpacing(8)
+
+        t3_lbl = QLabel(
+            "<b>Semantic CSV Cell Highlights:</b> "
+            "<span style='color: #4CAF50;'>■ Valid / Hosted PicURL / Profitable</span> &nbsp;|&nbsp; "
+            "<span style='color: #F44336;'>■ Missing Photo / Low Margin</span> &nbsp;|&nbsp; "
+            "<span style='color: #2196F3;'>■ eBay Category / ePID Matched</span> &nbsp;|&nbsp; "
+            "<span style='color: #FF9800;'>■ Blank Required Aspect</span>"
+        )
+        t3_lbl.setWordWrap(True)
+        t3_layout.addWidget(t3_lbl)
+
+        self.csv_table = QTableWidget()
+        self.csv_table.setAlternatingRowColors(True)
+        self.csv_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.csv_table.setStyleSheet("""
+            QTableWidget {
+                background-color: #121212;
+                gridline-color: #333333;
+                color: #E0E0E0;
+                font-size: 11px;
+            }
+            QHeaderView::section {
+                background-color: #1E1E1E;
+                color: #03DAC6;
+                font-weight: bold;
+                padding: 6px;
+                border: 1px solid #333333;
+            }
+        """)
+        t3_layout.addWidget(self.csv_table, stretch=1)
+        self.tabs.addTab(tab3, "📊   Live CSV Inspector")
+
+        root.addWidget(self.tabs, stretch=1)
+
 
     # ------------------------------------------------------------------
     # Styling
@@ -287,8 +368,10 @@ class MainWindow(QMainWindow):
         self.process_btn.setEnabled(False)
         self._set_status("Processing…")
 
-        # Launch worker thread
-        self._worker = PipelineWorker(mpn_list)
+        # Launch worker thread with selected shipping policy profile
+        selected_policy = self.shipping_policy_combo.currentText()
+        self._worker = PipelineWorker(mpn_list, shipping_profile=selected_policy)
+
         self._worker.log_signal.connect(self._append_log)
         self._worker.finished_signal.connect(self._on_pipeline_complete)
         self._worker.error_signal.connect(self._on_pipeline_error)
@@ -300,6 +383,67 @@ class MainWindow(QMainWindow):
         self.download_btn.setEnabled(True)
         self._set_status(f"✅ Complete — {len(csv_bytes):,} bytes ready.")
         self._append_log("\n✅ Pipeline complete!  Click  ⬇ Download CSV  to save your file.")
+        self._populate_preview_table(csv_bytes)
+
+    def _populate_preview_table(self, csv_bytes: bytes) -> None:
+        import csv
+        import io
+
+        text = csv_bytes.decode("utf-8-sig", errors="ignore")
+        reader = csv.reader(io.StringIO(text))
+        rows = list(reader)
+        if not rows:
+            return
+
+        headers = rows[0]
+        data = rows[1:]
+
+        self.csv_table.clear()
+        self.csv_table.setRowCount(len(data))
+        self.csv_table.setColumnCount(len(headers))
+        self.csv_table.setHorizontalHeaderLabels(headers)
+
+        # Color tokens
+        CLR_GREEN  = QBrush(QColor(27, 94, 32, 180))   # #1B5E20 - Hosted pic / good price
+        CLR_RED    = QBrush(QColor(183, 28, 28, 180))   # #B71C1C - Missing photo
+        CLR_BLUE   = QBrush(QColor(13, 71, 161, 180))   # #0D47A1 - Category / ePID matched
+        CLR_AMBER  = QBrush(QColor(230, 81, 0, 180))    # #E65100 - Missing aspect
+        CLR_PURPLE = QBrush(QColor(74, 20, 140, 180))   # #4A148C - Add Action
+
+        for r_idx, row in enumerate(data):
+            for c_idx, val in enumerate(row):
+                col_name = headers[c_idx] if c_idx < len(headers) else ""
+                item = QTableWidgetItem(val)
+
+                # Apply semantic rules
+                if col_name == "PicURL":
+                    if val.strip():
+                        item.setBackground(CLR_GREEN)
+                        item.setToolTip("✅ Hosted Cloudinary URL Ready")
+                    else:
+                        item.setBackground(CLR_RED)
+                        item.setToolTip("⚠️ Warning: No image found")
+                elif col_name in ("Category", "Product:EPID"):
+                    if val.strip():
+                        item.setBackground(CLR_BLUE)
+                        item.setToolTip("🔵 eBay Catalog Matched")
+                elif col_name.startswith("C:"):
+                    if not val.strip():
+                        item.setBackground(CLR_AMBER)
+                        item.setToolTip("🔸 Empty Item Specific (Aspect)")
+                elif col_name.startswith("Action"):
+                    item.setBackground(CLR_PURPLE)
+                elif col_name == "StartPrice":
+                    try:
+                        price = float(val)
+                        if price >= 8.0:
+                            item.setBackground(CLR_GREEN)
+                        else:
+                            item.setBackground(CLR_AMBER)
+                    except ValueError:
+                        pass
+
+                self.csv_table.setItem(r_idx, c_idx, item)
 
     def _on_pipeline_error(self, error_msg: str) -> None:
         self._set_status("❌ Error — see log.")

@@ -33,10 +33,27 @@ def get_token() -> str:
         logger.debug("[eBay Auth] Returning cached token.")
         return _cache["token"]
 
-    client_id     = os.environ["EBAY_CLIENT_ID"]
-    client_secret = os.environ["EBAY_CLIENT_SECRET"]
+    client_id     = os.environ.get("EBAY_CLIENT_ID", "")
+    client_secret = os.environ.get("EBAY_CLIENT_SECRET", "")
+
+    import shutil
+    import subprocess
+    op_path = shutil.which("op")
+    if op_path:
+        for var_name, var_val in [("EBAY_CLIENT_ID", client_id), ("EBAY_CLIENT_SECRET", client_secret)]:
+            if var_val and var_val.startswith("op://"):
+                try:
+                    res = subprocess.run([op_path, "read", var_val], capture_output=True, text=True, timeout=5, check=True)
+                    resolved = res.stdout.strip()
+                    if resolved:
+                        if var_name == "EBAY_CLIENT_ID": client_id = resolved
+                        else: client_secret = resolved
+                        os.environ[var_name] = resolved
+                except Exception:
+                    pass
 
     credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+
 
     headers = {
         "Content-Type":  "application/x-www-form-urlencoded",
@@ -58,5 +75,5 @@ def get_token() -> str:
     _cache["token"]      = token
     _cache["expires_at"] = now + expires_in
 
-    logger.info("[eBay Auth] ✓ Token obtained — expires in %d s.", expires_in)
+    logger.info("[eBay Auth] [OK] Token obtained - expires in %d s.", expires_in)
     return token

@@ -30,14 +30,35 @@ def _get_client() -> genai.Client:
     global _client
     if _client is None:
         api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
+        if api_key and api_key.startswith("op://"):
+            import shutil
+            import subprocess
+
+            op_path = shutil.which("op")
+            if op_path:
+                try:
+                    res = subprocess.run(
+                        [op_path, "read", api_key],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=True,
+                    )
+                    resolved = res.stdout.strip()
+                    if resolved:
+                        api_key = resolved
+                        os.environ["GEMINI_API_KEY"] = resolved
+                except Exception:
+                    pass
+
+        if not api_key or api_key.startswith("op://"):
             raise EnvironmentError(
-                "GEMINI_API_KEY is not set in .env. "
-                "Add it before running the pipeline."
+                "GEMINI_API_KEY could not be resolved from 1Password or .env."
             )
         _client = genai.Client(api_key=api_key)
         logger.info("[AI] Gemini client initialised (model: %s).", _MODEL_NAME)
     return _client
+
 
 
 _PROMPT = """\
@@ -46,22 +67,28 @@ Below is the raw data for Dorman/Help part number {mpn}.
 
 Raw Data
 --------
-Brand              : {brand}
+Brand              : Dorman
 Product Header     : {product_header}
 Category / SubType : {subtype}
 Scraped Specs      : {spec_text}
+
+STRICT BRAND RULE
+-----------------
+The product brand is ALWAYS Dorman.
+CRITICAL: The listing title MUST ALWAYS start with 'Dorman'. 
+NEVER use third-party manufacturer names (such as KYB, Febi, Bilstein, Cardone, Spectra, TYC, Monroe, ACDelco) in the title or item description text. Third-party numbers belong ONLY in the OE Interchange section.
 
 Task
 ----
 1. Write an eBay Listing TITLE that is STRICTLY UNDER 80 CHARACTERS.
    Use this exact format (no deviations):
-   [Brand] [Part Description] [MPN] [1-2 Key Technical Specs]
+   Dorman [Part Description] {mpn} [1-2 Key Technical Specs]
    Example: "Dorman Window Crank Handle 76970 Chrome OEM-Style Replacement"
 
 2. Write a clean HTML DESCRIPTION block using standard black font.
    Include:
    a) A short introductory paragraph (2-3 sentences) describing what
-      the part does and why it matters to the vehicle owner.
+      the Dorman part does and why it matters to the vehicle owner.
    b) An HTML bulleted list (<ul><li>…</li></ul>) listing the key
       technical attributes, dimensions, and fitment notes extracted
       from the scraped specs. If specs are unavailable, use only the
@@ -186,10 +213,10 @@ def generate_listing(part_data: dict, scraped_data: dict, log_callback=None) -> 
     success = False
     response = None
     
-    # Retry loop for 503/429 errors
-    max_attempts = 3
-    sleep_times = [2, 4, 8]
-    
+    # Exponential backoff with randomized jitter for 503/429 rate limit errors
+    max_attempts = 4
+    base_delay = 2.0
+
     for attempt in range(max_attempts):
         try:
             response = client.models.generate_content(
@@ -201,10 +228,11 @@ def generate_listing(part_data: dict, scraped_data: dict, log_callback=None) -> 
             break
         except Exception as exc:
             err_str = str(exc).lower()
-            if "503" in err_str or "429" in err_str or "quota" in err_str or "unavailable" in err_str:
+            if any(term in err_str for term in ("503", "429", "quota", "unavailable", "resource_exhausted")):
                 if attempt < max_attempts - 1:
-                    sleep_time = sleep_times[attempt]
-                    _log(f"[AI] ⚠ API rate limited or unavailable (503/429). Retrying in {sleep_time}s (Attempt {attempt+1}/{max_attempts})...")
+                    import random
+                    sleep_time = (base_delay * (2 ** attempt)) + random.uniform(0.5, 1.5)
+                    _log(f"[AI] ⚠ API rate limited or unavailable (503/429). Retrying in {sleep_time:.2f}s (Attempt {attempt+1}/{max_attempts})...")
                     time.sleep(sleep_time)
                 else:
                     _log(f"[AI] ⚠ Max retries reached for {_MODEL_NAME}.")
@@ -212,18 +240,28 @@ def generate_listing(part_data: dict, scraped_data: dict, log_callback=None) -> 
                 _log(f"[AI] ⚠ Unexpected Gemini error for {mpn}: {exc}")
                 break
 
-    # Fallback to gemini-3.5-flash if primary model failed
+    # Fallback to gemini-3.5-flash with exponential backoff if primary model failed
     if not success:
         _log(f"[AI] ⚠ Primary model failed. Attempting fallback request with gemini-3.5-flash...")
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.5-flash",
-                contents=prompt,
-                config=config,
-            )
-            success = True
-        except Exception as exc:
-            _log(f"[AI] ⚠ Fallback model also failed: {exc}")
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model="gemini-3.5-flash",
+                    contents=prompt,
+                    config=config,
+                )
+                success = True
+                break
+            except Exception as exc:
+                err_str = str(exc).lower()
+                if any(term in err_str for term in ("503", "429", "quota", "unavailable", "resource_exhausted")) and attempt < 1:
+                    import random
+                    sleep_time = 3.0 + random.uniform(0.5, 1.5)
+                    _log(f"[AI] ⚠ Fallback rate limited. Retrying gemini-3.5-flash in {sleep_time:.2f}s...")
+                    time.sleep(sleep_time)
+                else:
+                    _log(f"[AI] ⚠ Fallback model failed: {exc}")
+
 
     # Final rule-based fallback if all AI requests failed
     if not success or not response:
@@ -232,7 +270,18 @@ def generate_listing(part_data: dict, scraped_data: dict, log_callback=None) -> 
 
     try:
         listing  = eBayListing.model_validate_json(response.text)
-        title    = listing.title[:80]
+        title    = listing.title.strip()
+
+        # Title Sanitizer: Strip third-party brands and guarantee Dorman prefix
+        forbidden_brands = ["KYB", "Febi", "Bilstein", "Cardone", "Spectra", "TYC", "Monroe", "ACDelco", "Moog"]
+        for b in forbidden_brands:
+            title = re.sub(rf"\b{b}\b", "", title, flags=re.IGNORECASE).strip()
+
+        if not (title.startswith("Dorman") or title.startswith("Help")):
+            title = f"Dorman {title}".strip()
+
+        # Clean multiple spaces and cap at 80 characters
+        title = re.sub(r"\s+", " ", title)[:80]
         description_html = _append_fitment_and_oe(listing.description_html, scraped_data)
 
         if not title:
