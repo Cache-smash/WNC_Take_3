@@ -30,30 +30,9 @@ def _get_client() -> genai.Client:
     global _client
     if _client is None:
         api_key = os.environ.get("GEMINI_API_KEY")
-        if api_key and api_key.startswith("op://"):
-            import shutil
-            import subprocess
-
-            op_path = shutil.which("op")
-            if op_path:
-                try:
-                    res = subprocess.run(
-                        [op_path, "read", api_key],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                        check=True,
-                    )
-                    resolved = res.stdout.strip()
-                    if resolved:
-                        api_key = resolved
-                        os.environ["GEMINI_API_KEY"] = resolved
-                except Exception:
-                    pass
-
-        if not api_key or api_key.startswith("op://"):
+        if not api_key:
             raise EnvironmentError(
-                "GEMINI_API_KEY could not be resolved from 1Password or .env."
+                "GEMINI_API_KEY environment variable is not set."
             )
         _client = genai.Client(api_key=api_key)
         logger.info("[AI] Gemini client initialised (model: %s).", _MODEL_NAME)
@@ -87,13 +66,9 @@ Task
 
 2. Write a clean HTML DESCRIPTION block using standard black font.
    Include:
-   a) A short introductory paragraph (2-3 sentences) describing what
-      the Dorman part does and why it matters to the vehicle owner.
-   b) An HTML bulleted list (<ul><li>…</li></ul>) listing the key
-      technical attributes, dimensions, and fitment notes extracted
-      from the scraped specs. If specs are unavailable, use only the
-      known brand, part number, and category data.
-   Rules: No external CSS. No JavaScript. Keep markup eBay-compatible.
+   a) A clear, direct, professional 2-3 sentence description explaining the part's function, construction, and direct replacement role. Write in a clear, matter-of-fact tone. NEVER use cliché sales buzzwords like 'Unlock', 'Elevate', 'Game-Changer', 'Revitalize', 'Premium Upgrade', or 'Must-Have'.
+   b) An HTML bulleted list (<ul><li>…</li></ul>) listing all technical specifications, thread sizes, dimensions, materials, and package contents extracted from the specs.
+   Rules: Use standard black text, clean HTML tags (<p>, <ul>, <li>, <h3>, <table>), no inline dark background styling, no external CSS, no JavaScript. Keep markup 100% eBay-compatible.
    DO NOT list Fitment or Cross-Reference / Interchange numbers in this top bullet list (they are automatically appended in dedicated sections below).
 
 Return ONLY this exact JSON object — no prose, no code fences:

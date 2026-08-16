@@ -20,44 +20,6 @@ _ENV_PATH = Path(__file__).parent / ".env"
 load_dotenv(_ENV_PATH)
 
 
-def _resolve_1password_env() -> None:
-    """Uses a single 'op inject' pass on .env to resolve all 1Password references at once (1 password prompt)."""
-    import os
-    import subprocess
-    import shutil
-    from io import StringIO
-
-    op_path = shutil.which("op")
-    if not op_path or not _ENV_PATH.exists():
-        return
-
-    # Only run single-pass inject if op:// references are detected
-    env_content = _ENV_PATH.read_text(encoding="utf-8")
-    if "op://" not in env_content:
-        return
-
-    try:
-        res = subprocess.run(
-            [op_path, "inject"],
-            input=env_content,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
-        )
-        if res.stdout:
-            # Parse resolved key=value lines directly into os.environ
-            from dotenv import dotenv_values
-            resolved_dict = dotenv_values(stream=StringIO(res.stdout))
-            for k, v in resolved_dict.items():
-                if v:
-                    os.environ[k] = v
-    except Exception:
-        pass
-
-
-_resolve_1password_env()
-
 
 
 # ── Logging ───────────────────────────────────────────────────────────────

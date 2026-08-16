@@ -33,26 +33,11 @@ def get_token() -> str:
         logger.debug("[eBay Auth] Returning cached token.")
         return _cache["token"]
 
-    client_id     = os.environ.get("EBAY_CLIENT_ID", "")
-    client_secret = os.environ.get("EBAY_CLIENT_SECRET", "")
-
-    import shutil
-    import subprocess
-    op_path = shutil.which("op")
-    if op_path:
-        for var_name, var_val in [("EBAY_CLIENT_ID", client_id), ("EBAY_CLIENT_SECRET", client_secret)]:
-            if var_val and var_val.startswith("op://"):
-                try:
-                    res = subprocess.run([op_path, "read", var_val], capture_output=True, text=True, timeout=5, check=True)
-                    resolved = res.stdout.strip()
-                    if resolved:
-                        if var_name == "EBAY_CLIENT_ID": client_id = resolved
-                        else: client_secret = resolved
-                        os.environ[var_name] = resolved
-                except Exception:
-                    pass
+    client_id     = os.environ.get("EBAY_CLIENT_ID") or os.environ.get("EBAY_APP_ID", "")
+    client_secret = os.environ.get("EBAY_CLIENT_SECRET") or os.environ.get("EBAY_CERT_ID", "")
 
     credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+
 
 
     headers = {

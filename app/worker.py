@@ -29,10 +29,16 @@ class PipelineWorker(QThread):
     finished_signal: Signal = Signal(bytes)
     error_signal:    Signal = Signal(str)
 
-    def __init__(self, mpn_list: list[str], shipping_profile: str = "Free Shipping") -> None:
+    def __init__(
+        self,
+        mpn_list: list[str],
+        shipping_profile: str = "Free Shipping",
+        price_overrides: dict[str, float] | None = None,
+    ) -> None:
         super().__init__()
         self.mpn_list         = mpn_list
         self.shipping_profile = shipping_profile
+        self.price_overrides  = price_overrides or {}
 
 
     # ------------------------------------------------------------------
@@ -83,8 +89,8 @@ class PipelineWorker(QThread):
 
         for p in parts:
             self._log(
-                f"[Phase A] [OK] {p['mpn']} -> ePID: {p['epid']}  "
-                f"CategoryID: {p['category_id']}  Brand: {p['brand']}"
+                f"[Phase A] [OK] {p['mpn']} -> ePID: {p.get('epid', '')}  "
+                f"CategoryID: {p.get('category_id', '')}  Brand: {p.get('brand', '')}"
             )
 
         # -- Phase B: eBay OAuth + Taxonomy ---------------------------
@@ -152,6 +158,7 @@ class PipelineWorker(QThread):
                     "pic_url":   pic_url,
                     "aspects":   category_aspects.get(part["category_id"], []),
                     "scraped_data": combined_data,
+                    "custom_price": self.price_overrides.get(mpn),
                 }
             )
             self._log(f"[Part {mpn}] [OK] Enrichment complete.")

@@ -23,7 +23,7 @@ from .cloudinary_uploader import upload_images_for_part
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent
-APP_DB_PATH = BASE_DIR / "app_data.db"
+APP_DB_PATH = BASE_DIR / "app_data_(catalog-lookup).db"
 KOSKOWSKI_DB_PATH = BASE_DIR / "store_discovery" / "koskowskiautoparts_com.db"
 
 _RATE_LIMIT_SECS = 1.5
@@ -187,9 +187,15 @@ def fetch_koskowski_data(mpn: str, log_callback=None) -> dict:
                     if not result["images"] and row[2]:
                         try:
                             imgs = json.loads(row[2])
-                            result["images"] = [img.get("src", "") for img in imgs if isinstance(img, dict) and img.get("src")]
-                        except Exception:
-                            pass
+                            extracted = []
+                            for img in imgs:
+                                if isinstance(img, dict) and img.get("src"):
+                                    extracted.append(img.get("src"))
+                                elif isinstance(img, str) and img.strip():
+                                    extracted.append(img.strip())
+                            result["images"] = extracted
+                        except Exception as exc:
+                            logger.warning(f"Failed to parse images_json: {exc}")
                     
                     comp, specs, interchange = parse_koskowski_body_html(result["body_html"])
                     result["compatibility"] = comp

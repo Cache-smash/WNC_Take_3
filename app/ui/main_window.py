@@ -24,7 +24,9 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
@@ -127,7 +129,7 @@ class MainWindow(QMainWindow):
 
         splitter = QSplitter(Qt.Horizontal)
 
-        # Left panel — part number input
+        # Left panel — part number input & Terapeak helper
         left_widget = QWidget()
         left = QVBoxLayout(left_widget)
         left.setContentsMargins(0, 0, 8, 0)
@@ -138,10 +140,60 @@ class MainWindow(QMainWindow):
         left.addWidget(input_lbl)
 
         self.part_input = QPlainTextEdit()
-        self.part_input.setPlaceholderText("e.g.\n76970\n42317\n13938\n51729")
-        self.part_input.setMinimumHeight(180)
-        self.part_input.setMaximumHeight(280)
+        self.part_input.setPlaceholderText("e.g.\n61103\n61105\n61108\n76970")
+        self.part_input.setMinimumHeight(100)
+        self.part_input.setMaximumHeight(130)
+        self.part_input.textChanged.connect(self._on_part_input_changed)
         left.addWidget(self.part_input)
+
+        # Terapeak Price Override Table
+        terapeak_hdr = QHBoxLayout()
+        terapeak_lbl = QLabel("🏷️  Terapeak Price Overrides (Optional):")
+        terapeak_lbl.setFont(QFont("Segoe UI", 9, QFont.Bold))
+        terapeak_hdr.addWidget(terapeak_lbl)
+
+        self.launch_all_terapeak_btn = QPushButton("🔗  Open Terapeak Tabs")
+        self.launch_all_terapeak_btn.setToolTip("Open 3-Year Sold Terapeak research tabs in Chrome for all entered parts")
+        self.launch_all_terapeak_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1E1E1E;
+                color: #03DAC6;
+                border: 1px solid #03DAC6;
+                padding: 3px 8px;
+                font-size: 11px;
+                font-weight: bold;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #03DAC6;
+                color: #121212;
+            }
+        """)
+        self.launch_all_terapeak_btn.clicked.connect(self._on_launch_all_terapeak)
+        terapeak_hdr.addWidget(self.launch_all_terapeak_btn)
+        left.addLayout(terapeak_hdr)
+
+        self.terapeak_table = QTableWidget()
+        self.terapeak_table.setColumnCount(3)
+        self.terapeak_table.setHorizontalHeaderLabels(["Part #", "Terapeak Link", "Avg Sold Price ($)"])
+        self.terapeak_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.terapeak_table.setMinimumHeight(180)
+        self.terapeak_table.setStyleSheet("""
+            QTableWidget {
+                background-color: #181818;
+                gridline-color: #333333;
+                color: #E0E0E0;
+                font-size: 11px;
+            }
+            QHeaderView::section {
+                background-color: #222222;
+                color: #03DAC6;
+                font-weight: bold;
+                padding: 4px;
+                border: 1px solid #333333;
+            }
+        """)
+        left.addWidget(self.terapeak_table)
 
         self.process_btn = QPushButton("⚙   Process Parts")
         self.process_btn.setObjectName("primaryBtn")
@@ -335,15 +387,92 @@ class MainWindow(QMainWindow):
     def _set_status(self, msg: str) -> None:
         self.status_lbl.setText(msg)
 
+    def _on_part_input_changed(self) -> None:
+        import webbrowser
+        from PySide6.QtWidgets import QLineEdit
+
+        raw = self.part_input.toPlainText().strip()
+        mpn_list: list[str] = []
+        seen: set[str] = set()
+        for line in raw.splitlines():
+            mpn = line.strip()
+            if mpn and mpn not in seen:
+                mpn_list.append(mpn)
+                seen.add(mpn)
+                if len(mpn_list) == 15:
+                    break
+
+        self.terapeak_table.setRowCount(len(mpn_list))
+        for r_idx, mpn in enumerate(mpn_list):
+            # Column 0: MPN
+            item_mpn = QTableWidgetItem(mpn)
+            item_mpn.setFlags(Qt.ItemIsEnabled)
+            self.terapeak_table.setItem(r_idx, 0, item_mpn)
+
+            # Column 1: Terapeak Link Launch Button
+            btn = QPushButton("🔍 Search Terapeak")
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #222222;
+                    color: #03DAC6;
+                    border: 1px solid #333333;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                }
+                QPushButton:hover {
+                    background-color: #03DAC6;
+                    color: #121212;
+                }
+            """)
+            import time
+            end_ms = int(time.time() * 1000)
+            start_ms = end_ms - (3 * 365 * 24 * 60 * 60 * 1000)
+            url = f"https://www.ebay.com/sh/research?keywords=dorman+{mpn}&dayRange=1095&startDate={start_ms}&endDate={end_ms}&tabName=SOLD"
+            btn.clicked.connect(lambda _, u=url: webbrowser.open(u))
+            self.terapeak_table.setCellWidget(r_idx, 1, btn)
+
+            # Column 2: Price Input LineEdit (preserve existing text if present)
+            existing_widget = self.terapeak_table.cellWidget(r_idx, 2)
+            if not existing_widget or not isinstance(existing_widget, QLineEdit):
+                price_edit = QLineEdit()
+                price_edit.setPlaceholderText("Auto (Floor)")
+                price_edit.setStyleSheet("""
+                    QLineEdit {
+                        background-color: #0A0A0A;
+                        color: #00FF66;
+                        border: 1px solid #333333;
+                        padding: 2px 4px;
+                        font-weight: bold;
+                    }
+                """)
+                self.terapeak_table.setCellWidget(r_idx, 2, price_edit)
+
+    def _on_launch_all_terapeak(self) -> None:
+        import webbrowser
+        import time
+        end_ms = int(time.time() * 1000)
+        start_ms = end_ms - (3 * 365 * 24 * 60 * 60 * 1000)
+        raw = self.part_input.toPlainText().strip()
+        seen: set[str] = set()
+        count = 0
+        for line in raw.splitlines():
+            mpn = line.strip()
+            if mpn and mpn not in seen:
+                seen.add(mpn)
+                url = f"https://www.ebay.com/sh/research?keywords=dorman+{mpn}&dayRange=1095&startDate={start_ms}&endDate={end_ms}&tabName=SOLD"
+                webbrowser.open(url)
+                count += 1
+                if count == 15:
+                    break
+        if count > 0:
+            self._append_log(f"\n🌐 Opened {count} Terapeak research tab(s) in Chrome.")
+
     def _on_process(self) -> None:
         raw = self.part_input.toPlainText().strip()
         if not raw:
             QMessageBox.warning(self, "Input Required", "Please enter at least one part number.")
             return
 
-        # Parse, deduplicate, cap at 15.
-        # The break lives inside the deduplication guard so blank lines and
-        # duplicate rows are skipped without consuming slots in the cap.
         mpn_list: list[str] = []
         seen: set[str] = set()
         for line in raw.splitlines():
@@ -361,6 +490,26 @@ class MainWindow(QMainWindow):
             )
             return
 
+        # Extract price overrides from Terapeak table
+        from PySide6.QtWidgets import QLineEdit
+        price_overrides: dict[str, float] = {}
+        for r_idx in range(self.terapeak_table.rowCount()):
+            mpn_item = self.terapeak_table.item(r_idx, 0)
+            price_widget = self.terapeak_table.cellWidget(r_idx, 2)
+            if mpn_item and isinstance(price_widget, QLineEdit):
+                mpn_val = mpn_item.text().strip()
+                val_text = price_widget.text().replace("$", "").strip()
+                if val_text:
+                    try:
+                        price_overrides[mpn_val] = float(val_text)
+                    except ValueError:
+                        pass
+
+        if price_overrides:
+            self._append_log(f"\n🏷️ Applied {len(price_overrides)} custom Terapeak selling price override(s):")
+            for k, v in price_overrides.items():
+                self._append_log(f"   - MPN {k}: ${v:.2f}")
+
         # Reset UI state
         self.log_view.clear()
         self._csv_bytes = None
@@ -368,9 +517,13 @@ class MainWindow(QMainWindow):
         self.process_btn.setEnabled(False)
         self._set_status("Processing…")
 
-        # Launch worker thread with selected shipping policy profile
+        # Launch worker thread with selected shipping policy profile and price overrides
         selected_policy = self.shipping_policy_combo.currentText()
-        self._worker = PipelineWorker(mpn_list, shipping_profile=selected_policy)
+        self._worker = PipelineWorker(
+            mpn_list,
+            shipping_profile=selected_policy,
+            price_overrides=price_overrides,
+        )
 
         self._worker.log_signal.connect(self._append_log)
         self._worker.finished_signal.connect(self._on_pipeline_complete)

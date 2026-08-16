@@ -85,6 +85,7 @@ def upload_images_for_part(mpn: str, log_callback=None) -> str:
             result = cloudinary.uploader.upload(
                 str(img),
                 public_id=f"wnc_parts/{mpn}/{img.stem}",
+                format="jpg",
                 overwrite=True,
                 transformation=_TRANSFORM,
             )

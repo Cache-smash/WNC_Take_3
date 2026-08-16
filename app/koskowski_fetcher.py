@@ -20,7 +20,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent
-APP_DB_PATH = BASE_DIR / "app_data.db"
+APP_DB_PATH = BASE_DIR / "app_data_(catalog-lookup).db"
 KOSKOWSKI_DB_PATH = BASE_DIR / "store_discovery" / "koskowskiautoparts_com.db"
 
 # Human Windows 11 Chrome Fingerprint Headers

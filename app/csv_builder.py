@@ -126,10 +126,14 @@ def build_csv(enriched_parts: list[dict], shipping_profile: str = "Free Shipping
         row["ShippingProfileName"] = shipping_profile
         row["Category"]     = pd.get("category_id", "")
 
-        # Dynamic Pricing Engine calculation
-        from .pricing_engine import evaluate_part_pricing
-        pricing_rec = evaluate_part_pricing(mpn=mpn, brand=brand, title=listing.get("title", ""))
-        row["StartPrice"]   = f"{pricing_rec.suggested_price:.2f}"
+        # Dynamic Pricing Engine calculation (checks for user-defined price override first)
+        custom_price = ep.get("custom_price")
+        if custom_price and custom_price > 0:
+            row["StartPrice"] = f"{custom_price:.2f}"
+        else:
+            from .pricing_engine import evaluate_part_pricing
+            pricing_rec = evaluate_part_pricing(mpn=mpn, brand=brand, title=listing.get("title", ""))
+            row["StartPrice"] = f"{pricing_rec.suggested_price:.2f}"
 
 
         row["Title"]        = listing.get("title", "")
